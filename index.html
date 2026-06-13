@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Test Caméra</title>
+  <title>Scanner QR & Codes-barres</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -16,42 +16,57 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 20px;
     }
 
-    h1 {
-      font-size: 20px;
-      margin-bottom: 8px;
+    .header {
       text-align: center;
-    }
-
-    p {
-      color: #666;
-      font-size: 13px;
-      text-align: center;
-      margin-bottom: 24px;
-    }
-
-    #viewport {
-      width: 100%;
-      max-width: 360px;
-      aspect-ratio: 1/1;
-      background: #111;
-      border-radius: 16px;
-      overflow: hidden;
-      border: 1px solid #222;
-      position: relative;
       margin-bottom: 20px;
+    }
+
+    .icon {
+      width: 52px;
+      height: 52px;
+      background: linear-gradient(135deg, #6c63ff, #3ecfcf);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin: 0 auto 12px;
+    }
+
+    h1 { font-size: 20px; font-weight: 700; }
+    .subtitle { color: #555; font-size: 12px; margin-top: 4px; }
+
+    .card {
+      width: 100%;
+      max-width: 380px;
+      background: #13131a;
+      border-radius: 20px;
+      border: 1px solid #1e1e2e;
+      overflow: hidden;
+    }
+
+    /* Viewport */
+    #viewport {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1/1;
+      background: #000;
+      overflow: hidden;
     }
 
     video {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      display: none;
     }
 
-    #placeholder {
+    canvas { display: none; }
+
+    /* Idle */
+    #idle-screen {
       position: absolute;
       inset: 0;
       display: flex;
@@ -59,103 +74,402 @@
       align-items: center;
       justify-content: center;
       gap: 10px;
-      color: #444;
+      color: #333;
       font-size: 13px;
     }
+    #idle-screen span { font-size: 44px; opacity: 0.4; }
 
-    #placeholder span { font-size: 40px; }
+    /* Scan overlay */
+    #scan-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      pointer-events: none;
+    }
 
-    #status {
-      font-size: 13px;
+    .corner {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+    }
+    .corner.tl { top: 20px; left: 20px; border-top: 3px solid #6c63ff; border-left: 3px solid #6c63ff; border-radius: 4px 0 0 0; }
+    .corner.tr { top: 20px; right: 20px; border-top: 3px solid #6c63ff; border-right: 3px solid #6c63ff; border-radius: 0 4px 0 0; }
+    .corner.bl { bottom: 20px; left: 20px; border-bottom: 3px solid #6c63ff; border-left: 3px solid #6c63ff; border-radius: 0 0 0 4px; }
+    .corner.br { bottom: 20px; right: 20px; border-bottom: 3px solid #6c63ff; border-right: 3px solid #6c63ff; border-radius: 0 0 4px 0; }
+
+    @keyframes scanline {
+      0%   { top: 18%; opacity: 1; }
+      48%  { opacity: 1; }
+      50%  { top: 78%; opacity: 1; }
+      98%  { opacity: 1; }
+      100% { top: 18%; opacity: 1; }
+    }
+
+    .scanline {
+      position: absolute;
+      left: 12%;
+      right: 12%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #6c63ff, #3ecfcf, #6c63ff, transparent);
+      box-shadow: 0 0 10px #6c63ff88;
+      animation: scanline 2.2s ease-in-out infinite;
+    }
+
+    /* Result overlay */
+    #result-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10,10,15,0.93);
+      padding: 24px;
+      gap: 12px;
+    }
+
+    .result-check {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      border: 2px solid #3ecfcf;
+      background: #3ecfcf15;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
       color: #3ecfcf;
-      margin-bottom: 16px;
-      min-height: 20px;
-      text-align: center;
     }
 
-    button {
+    .result-type {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #6c63ff;
+    }
+
+    .result-value {
+      background: #0a0a0f;
+      border: 1px solid #222;
+      border-radius: 10px;
+      padding: 10px 14px;
       width: 100%;
-      max-width: 360px;
+      word-break: break-all;
+      font-size: 13px;
+      color: #ccc;
+      text-align: center;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+
+    .result-link {
+      color: #6c63ff;
+      font-size: 12px;
+      text-decoration: none;
+      border-bottom: 1px solid #6c63ff55;
+      padding-bottom: 2px;
+    }
+
+    /* Bottom section */
+    .bottom {
+      padding: 18px 18px 22px;
+    }
+
+    /* Mode selector */
+    .mode-tabs {
+      display: flex;
+      background: #0a0a0f;
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 14px;
+      border: 1px solid #1e1e2e;
+    }
+
+    .mode-tab {
+      flex: 1;
+      padding: 8px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #555;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-tab.active {
+      background: #1e1e2e;
+      color: #f0f0f0;
+    }
+
+    .status {
+      font-size: 12px;
+      color: #3ecfcf;
+      text-align: center;
+      min-height: 18px;
+      margin-bottom: 12px;
+    }
+
+    .btn-primary {
+      width: 100%;
       padding: 14px;
       background: linear-gradient(135deg, #6c63ff, #3ecfcf);
       border: none;
       border-radius: 12px;
       color: #fff;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
     }
 
-    button:active { opacity: 0.85; }
-
-    #stop-btn {
+    .btn-secondary {
+      width: 100%;
+      padding: 14px;
       background: transparent;
-      border: 1px solid #333;
-      color: #aaa;
-      margin-top: 10px;
-      display: none;
+      border: 1px solid #222;
+      border-radius: 12px;
+      color: #888;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      color: #333;
+      margin-top: 12px;
+    }
+
+    .unsupported-banner {
+      background: #ff6b6b15;
+      border: 1px solid #ff6b6b44;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #ff9999;
+      text-align: center;
+      margin-bottom: 12px;
     }
   </style>
 </head>
 <body>
 
-  <h1>📷 Test Caméra</h1>
-  <p>Appuie sur le bouton pour ouvrir la caméra</p>
+  <div class="header">
+    <div class="icon">⬛</div>
+    <h1>Scanner</h1>
+    <p class="subtitle">QR Code & Code-barres</p>
+  </div>
 
-  <div id="viewport">
-    <video id="video" autoplay playsinline muted></video>
-    <div id="placeholder">
-      <span>📷</span>
-      <p>La caméra s'affiche ici</p>
+  <div class="card">
+    <div id="viewport">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas"></canvas>
+
+      <div id="idle-screen">
+        <span>📷</span>
+        <p>La caméra s'affiche ici</p>
+      </div>
+
+      <div id="scan-overlay">
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div class="scanline"></div>
+      </div>
+
+      <div id="result-overlay">
+        <div class="result-check">✓</div>
+        <div class="result-type" id="result-type"></div>
+        <div class="result-value" id="result-value"></div>
+        <a class="result-link" id="result-link" href="#" target="_blank" rel="noopener" style="display:none">
+          Ouvrir le lien →
+        </a>
+      </div>
+    </div>
+
+    <div class="bottom">
+
+      <div id="unsupported-banner" class="unsupported-banner" style="display:none">
+        ⚠️ Navigateur non compatible — utilise Chrome ou Edge
+      </div>
+
+      <!-- Mode tabs -->
+      <div class="mode-tabs" id="mode-tabs">
+        <button class="mode-tab active" onclick="setMode('qr_code')" id="tab-qr">QR Code</button>
+        <button class="mode-tab" onclick="setMode('barcode')" id="tab-bar">Code-barres</button>
+        <button class="mode-tab" onclick="setMode('all')" id="tab-all">Les deux</button>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <button class="btn-primary" id="start-btn" onclick="startCamera()">📷 Ouvrir la caméra</button>
+      <button class="btn-secondary" id="stop-btn" onclick="stopCamera()" style="display:none">Arrêter</button>
+      <button class="btn-primary" id="again-btn" onclick="reset()" style="display:none">Scanner à nouveau</button>
+
+      <p class="footer-note">100% local · aucune donnée envoyée</p>
     </div>
   </div>
 
-  <div id="status"></div>
-
-  <button id="start-btn" onclick="startCamera()">Ouvrir la caméra</button>
-  <button id="stop-btn" onclick="stopCamera()">Arrêter</button>
-
   <script>
     let stream = null;
+    let animFrame = null;
+    let detector = null;
+    let currentMode = 'qr_code';
 
-    async function startCamera() {
-      const video = document.getElementById('video');
-      const status = document.getElementById('status');
-      const placeholder = document.getElementById('placeholder');
+    const FORMATS = {
+      qr_code: ['qr_code'],
+      barcode: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'codabar', 'data_matrix'],
+      all: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'codabar', 'data_matrix']
+    };
 
-      status.textContent = "Demande de permission...";
+    const TYPE_LABELS = {
+      qr_code: 'QR Code',
+      ean_13: 'EAN-13',
+      ean_8: 'EAN-8',
+      code_128: 'Code 128',
+      code_39: 'Code 39',
+      upc_a: 'UPC-A',
+      upc_e: 'UPC-E',
+      itf: 'ITF',
+      codabar: 'Codabar',
+      data_matrix: 'Data Matrix',
+    };
 
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
-        });
+    // Check support
+    if (!('BarcodeDetector' in window)) {
+      document.getElementById('unsupported-banner').style.display = 'block';
+      document.getElementById('start-btn').disabled = true;
+      document.getElementById('start-btn').style.opacity = '0.4';
+    }
 
-        video.srcObject = stream;
-        video.style.display = 'block';
-        placeholder.style.display = 'none';
-
-        status.textContent = "✅ Caméra active !";
-        document.getElementById('start-btn').style.display = 'none';
-        document.getElementById('stop-btn').style.display = 'block';
-
-      } catch (err) {
-        status.style.color = '#ff6b6b';
-        status.textContent = "❌ " + err.message;
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab-' + (mode === 'qr_code' ? 'qr' : mode === 'barcode' ? 'bar' : 'all')).classList.add('active');
+      // Recreate detector with new formats
+      if ('BarcodeDetector' in window) {
+        detector = new BarcodeDetector({ formats: FORMATS[mode] });
       }
     }
 
-    function stopCamera() {
+    async function startCamera() {
+      setStatus("Demande de permission...");
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        const video = document.getElementById('video');
+        video.srcObject = stream;
+        await video.play();
+
+        document.getElementById('idle-screen').style.display = 'none';
+        document.getElementById('scan-overlay').style.display = 'block';
+        document.getElementById('start-btn').style.display = 'none';
+        document.getElementById('stop-btn').style.display = 'block';
+        document.getElementById('mode-tabs').style.opacity = '0.4';
+        document.getElementById('mode-tabs').style.pointerEvents = 'none';
+
+        if (!detector) {
+          detector = new BarcodeDetector({ formats: FORMATS[currentMode] });
+        }
+
+        setStatus("Scan en cours...");
+        scanLoop();
+
+      } catch (err) {
+        setStatus("❌ " + err.message, true);
+      }
+    }
+
+    function scanLoop() {
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+
+      const tick = async () => {
+        if (!stream || video.readyState < 2) {
+          animFrame = requestAnimationFrame(tick);
+          return;
+        }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+
+        try {
+          const codes = await detector.detect(canvas);
+          if (codes.length > 0) {
+            const code = codes[0];
+            showResult(code.rawValue, code.format);
+            return;
+          }
+        } catch (_) {}
+
+        animFrame = requestAnimationFrame(tick);
+      };
+
+      animFrame = requestAnimationFrame(tick);
+    }
+
+    function showResult(value, format) {
+      stopStream();
+
+      document.getElementById('scan-overlay').style.display = 'none';
+      document.getElementById('result-overlay').style.display = 'flex';
+      document.getElementById('result-type').textContent = TYPE_LABELS[format] || format;
+      document.getElementById('result-value').textContent = value;
+
+      const link = document.getElementById('result-link');
+      try {
+        new URL(value);
+        link.href = value;
+        link.style.display = 'inline';
+      } catch {
+        link.style.display = 'none';
+      }
+
+      document.getElementById('stop-btn').style.display = 'none';
+      document.getElementById('again-btn').style.display = 'block';
+      setStatus("✅ Détecté !");
+    }
+
+    function stopStream() {
+      if (animFrame) cancelAnimationFrame(animFrame);
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
         stream = null;
       }
-      const video = document.getElementById('video');
-      video.srcObject = null;
-      video.style.display = 'none';
-      document.getElementById('placeholder').style.display = 'flex';
-      document.getElementById('status').textContent = "";
+    }
+
+    function stopCamera() {
+      stopStream();
+      document.getElementById('video').srcObject = null;
+      document.getElementById('idle-screen').style.display = 'flex';
+      document.getElementById('scan-overlay').style.display = 'none';
       document.getElementById('start-btn').style.display = 'block';
       document.getElementById('stop-btn').style.display = 'none';
+      document.getElementById('mode-tabs').style.opacity = '1';
+      document.getElementById('mode-tabs').style.pointerEvents = 'auto';
+      setStatus("");
+    }
+
+    function reset() {
+      document.getElementById('result-overlay').style.display = 'none';
+      document.getElementById('again-btn').style.display = 'none';
+      document.getElementById('mode-tabs').style.opacity = '1';
+      document.getElementById('mode-tabs').style.pointerEvents = 'auto';
+      setStatus("");
+      startCamera();
+    }
+
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.style.color = isError ? '#ff6b6b' : '#3ecfcf';
     }
   </script>
 
