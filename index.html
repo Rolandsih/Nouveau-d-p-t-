@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Caméra</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #f0f0f0;
+      font-family: system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    p {
+      color: #666;
+      font-size: 13px;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    #viewport {
+      width: 100%;
+      max-width: 360px;
+      aspect-ratio: 1/1;
+      background: #111;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid #222;
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    #placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: #444;
+      font-size: 13px;
+    }
+
+    #placeholder span { font-size: 40px; }
+
+    #status {
+      font-size: 13px;
+      color: #3ecfcf;
+      margin-bottom: 16px;
+      min-height: 20px;
+      text-align: center;
+    }
+
+    button {
+      width: 100%;
+      max-width: 360px;
+      padding: 14px;
+      background: linear-gradient(135deg, #6c63ff, #3ecfcf);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:active { opacity: 0.85; }
+
+    #stop-btn {
+      background: transparent;
+      border: 1px solid #333;
+      color: #aaa;
+      margin-top: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>📷 Test Caméra</h1>
+  <p>Appuie sur le bouton pour ouvrir la caméra</p>
+
+  <div id="viewport">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="placeholder">
+      <span>📷</span>
+      <p>La caméra s'affiche ici</p>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
+  <button id="start-btn" onclick="startCamera()">Ouvrir la caméra</button>
+  <button id="stop-btn" onclick="stopCamera()">Arrêter</button>
+
+  <script>
+    let stream = null;
+
+    async function startCamera() {
+      const video = document.getElementById('video');
+      const status = document.getElementById('status');
+      const placeholder = document.getElementById('placeholder');
+
+      status.textContent = "Demande de permission...";
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+
+        video.srcObject = stream;
+        video.style.display = 'block';
+        placeholder.style.display = 'none';
+
+        status.textContent = "✅ Caméra active !";
+        document.getElementById('start-btn').style.display = 'none';
+        document.getElementById('stop-btn').style.display = 'block';
+
+      } catch (err) {
+        status.style.color = '#ff6b6b';
+        status.textContent = "❌ " + err.message;
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      const video = document.getElementById('video');
+      video.srcObject = null;
+      video.style.display = 'none';
+      document.getElementById('placeholder').style.display = 'flex';
+      document.getElementById('status').textContent = "";
+      document.getElementById('start-btn').style.display = 'block';
+      document.getElementById('stop-btn').style.display = 'none';
+    }
+  </script>
+
+</body>
+</html>
