@@ -85,6 +85,7 @@
   .value-label{font-size:14px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:3px;}
   .point{cursor:grab;}
   .point:active{cursor:grabbing;}
+  .point.locked{cursor:default;}
   .point.invalid circle{fill:var(--red)!important;stroke:var(--red)!important;}
   .invalid-text{fill:var(--red)!important;}
   .area-ca{fill:url(#caGradient);opacity:.9;}
@@ -106,12 +107,18 @@
   }
   .month-block{
     display:grid;
-    grid-template-columns:90px 1fr;
+    grid-template-columns:120px 1fr;
     gap:14px;
     align-items:center;
     padding:10px 12px;
     border-radius:12px;
     margin-bottom:6px;
+  }
+  .month-block > div:first-child{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+    align-items:flex-start;
   }
   .month-block.has-error{background:var(--red-bg);}
   .month-name{font-weight:700;font-size:14px;color:var(--blue-dark);}
@@ -167,6 +174,41 @@
   }
   .reset-btn:hover{background:var(--blue-dark);}
   .small-note{font-size:12px;color:var(--sub);margin-top:8px;}
+
+  .toolbar{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .toggle-btn{
+    background:#fff;
+    border:1.5px solid #d8dbe4;
+    color:var(--blue-dark);
+    padding:8px 16px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    transition:background .15s, color .15s, border-color .15s;
+  }
+  .toggle-btn:hover{border-color:var(--blue);}
+  .toggle-btn.active{
+    background:var(--blue);
+    border-color:var(--blue);
+    color:#fff;
+  }
+  .stock-badge{
+    font-size:12px;
+    font-weight:700;
+    padding:2px 9px;
+    border-radius:999px;
+    background:#eef3ff;
+    color:var(--blue);
+    white-space:nowrap;
+  }
+  .stock-badge.zero{background:#f1f2f5;color:var(--sub);}
 </style>
 </head>
 <body>
@@ -182,6 +224,10 @@
   </div>
 
   <div class="global-error" id="globalError">⚠ Incohérence : on ne peut pas vendre plus de produits qu'on en a fabriqués.</div>
+
+  <div class="toolbar">
+    <button class="toggle-btn" id="cumulBtn">Voir en cumulé (Janv → mois)</button>
+  </div>
 
   <div class="chart-wrap">
     <svg id="chart" viewBox="0 0 1080 520"></svg>
@@ -205,9 +251,34 @@ const defaultData = {
 };
 
 let data = JSON.parse(JSON.stringify(defaultData));
+let cumulMode = false; // false = vue mensuelle, true = vue cumulée (Janvier -> mois)
 
 const MAX_UNITS = 16;
 const MAX_CA = 50000;
+
+// Stock cumulé : reporté d'un mois sur l'autre.
+// stock[i] = stock[i-1] + fabriqués[i] - vendus[i]
+function computeStock(){
+  const stock = [];
+  let running = 0;
+  for(let i=0;i<months.length;i++){
+    running += data.fab[i] - data.vendu[i];
+    stock.push(running);
+  }
+  return stock;
+}
+
+// Valeurs cumulées (somme depuis Janvier) pour la vue "cumulé"
+function cumulate(arr){
+  const out = [];
+  let running = 0;
+  for(let i=0;i<arr.length;i++){
+    running += arr[i];
+    out.push(running);
+  }
+  return out;
+}
+
 
 const svgNS = "http://www.w3.org/2000/svg";
 const svg = document.getElementById('chart');
@@ -217,8 +288,6 @@ const plotW = W - padL - padR;
 const plotH = H - padT - padB;
 
 function xFor(i){ return padL + (plotW/(months.length-1))*i; }
-function yForUnits(v){ return padT + plotH - (v/MAX_UNITS)*plotH; }
-function yForCA(v){ return padT + plotH - (v/MAX_CA)*plotH; }
 
 // Catmull-Rom -> smooth bezier path
 function smoothPath(points){
@@ -260,15 +329,28 @@ function render(){
   defs.appendChild(grad);
   svg.appendChild(defs);
 
+  // Données affichées : mensuelles ou cumulées selon le mode
+  const fabDisplay = cumulMode ? cumulate(data.fab) : data.fab;
+  const venduDisplay = cumulMode ? cumulate(data.vendu) : data.vendu;
+  const caDisplay = cumulMode ? cumulate(data.ca) : data.ca;
+
+  // Échelles : fixes en vue mensuelle, dynamiques en vue cumulée (pour que ça rentre)
+  const maxUnitsScale = cumulMode ? Math.max(MAX_UNITS, Math.ceil(Math.max(...fabDisplay, ...venduDisplay)/2)*2 + 2) : MAX_UNITS;
+  const maxCaScale = cumulMode ? Math.max(MAX_CA, Math.ceil(Math.max(...caDisplay)/5000)*5000 + 5000) : MAX_CA;
+
+  function yUnits(v){ return padT + plotH - (v/maxUnitsScale)*plotH; }
+  function yCA(v){ return padT + plotH - (v/maxCaScale)*plotH; }
+
   // gridlines + left axis (units) + right axis (CA)
-  const stepsUnits = 8; // 0,2,4,...16
-  for(let v=0; v<=MAX_UNITS; v+=2){
-    const y = yForUnits(v);
+  const gridSteps = 8;
+  for(let s=0; s<=gridSteps; s++){
+    const v = (maxUnitsScale/gridSteps)*s;
+    const y = yUnits(v);
     svg.appendChild(el('line',{class:'gridline', x1:padL, x2:W-padR, y1:y, y2:y}));
     const t = el('text',{class:'axis-text', x:padL-14, y:y+5, 'text-anchor':'end'});
-    t.textContent = v;
+    t.textContent = Math.round(v);
     svg.appendChild(t);
-    const caVal = Math.round((v/MAX_UNITS)*MAX_CA/1000)*1000;
+    const caVal = Math.round(((maxCaScale/gridSteps)*s)/1000)*1000;
     const tr = el('text',{class:'axis-text-right', x:W-padR+14, y:y+5, 'text-anchor':'start'});
     tr.textContent = caVal.toLocaleString('fr-FR');
     svg.appendChild(tr);
@@ -291,13 +373,13 @@ function render(){
 
   const errors = getErrors();
 
-  // points arrays
-  const fabPts = data.fab.map((v,i)=>({x:xFor(i), y:yForUnits(v)}));
-  const venduPts = data.vendu.map((v,i)=>({x:xFor(i), y:yForUnits(v)}));
-  const caPts = data.ca.map((v,i)=>({x:xFor(i), y:yForCA(v)}));
+  // points arrays (utilisent les données affichées + échelles courantes)
+  const fabPts = fabDisplay.map((v,i)=>({x:xFor(i), y:yUnits(v)}));
+  const venduPts = venduDisplay.map((v,i)=>({x:xFor(i), y:yUnits(v)}));
+  const caPts = caDisplay.map((v,i)=>({x:xFor(i), y:yCA(v)}));
 
   // CA area fill
-  const areaPath = smoothPath(caPts) + ` L ${caPts[caPts.length-1].x} ${yForCA(0)} L ${caPts[0].x} ${yForCA(0)} Z`;
+  const areaPath = smoothPath(caPts) + ` L ${caPts[caPts.length-1].x} ${yCA(0)} L ${caPts[0].x} ${yCA(0)} Z`;
   svg.appendChild(el('path',{d:areaPath, class:'area-ca'}));
 
   // lines
@@ -305,15 +387,192 @@ function render(){
   svg.appendChild(el('path',{d:smoothPath(fabPts), fill:'none', stroke:'#1d4ed8', 'stroke-width':3}));
   svg.appendChild(el('path',{d:smoothPath(venduPts), fill:'none', stroke:'#2e9e3f', 'stroke-width':3}));
 
-  // CA points + labels (no drag, informational but still editable via slider)
+  // CA points + labels
   caPts.forEach((p,i)=>{
     svg.appendChild(el('circle',{cx:p.x, cy:p.y, r:6, fill:'#f08a1c', stroke:'#fff', 'stroke-width':2}));
     const lbl = el('text',{class:'value-label', x:p.x, y:p.y-14, 'text-anchor':'middle', fill:'#f08a1c'});
-    lbl.textContent = data.ca[i].toLocaleString('fr-FR');
+    lbl.textContent = caDisplay[i].toLocaleString('fr-FR');
     svg.appendChild(lbl);
   });
 
-  // fabriqués points (draggable)
+  // fabriqués points (draggable seulement en vue mensuelle — en cumulé, glisser n'aurait pas de sens direct)
+  fabPts.forEach((p,i)=>{
+    const g = el('g',{class:'point'+(errors[i]?' invalid':'')+(cumulMode?' locked':''), 'data-series':'fab', 'data-index':i});
+    g.appendChild(el('circle',{cx:p.x, cy:p.y, r:7, fill:'#1d4ed8', stroke:'#fff', 'stroke-width':2}));
+    const lbl = el('text',{class:'value-label'+(errors[i]?' invalid-text':''), x:p.x, y:p.y-16, 'text-anchor':'middle', fill:'#1d4ed8'});
+    lbl.textContent = fabDisplay[i];
+    g.appendChild(lbl);
+    g.style.pointerEvents='all';
+    svg.appendChild(g);
+    if(!cumulMode) attachDrag(g, 'fab', i);
+  });
+
+  // vendus points (draggable seulement en vue mensuelle)
+  venduPts.forEach((p,i)=>{
+    const g = el('g',{class:'point'+(errors[i]?' invalid':'')+(cumulMode?' locked':''), 'data-series':'vendu', 'data-index':i});
+    g.appendChild(el('circle',{cx:p.x, cy:p.y, r:7, fill:'#2e9e3f', stroke:'#fff', 'stroke-width':2}));
+    const lbl = el('text',{class:'value-label'+(errors[i]?' invalid-text':''), x:p.x, y:p.y+24, 'text-anchor':'middle', fill:'#2e9e3f'});
+    lbl.textContent = venduDisplay[i];
+    g.appendChild(lbl);
+    g.style.pointerEvents='all';
+    svg.appendChild(g);
+    if(!cumulMode) attachDrag(g, 'vendu', i);
+  });
+
+  renderControls(errors);
+  renderGlobalError(errors);
+}
+
+function renderGlobalError(errors){
+  const ge = document.getElementById('globalError');
+  ge.classList.toggle('show', errors.some(Boolean));
+}
+
+function attachDrag(node, series, index){
+  let dragging = false;
+
+  function svgPoint(evt){
+    const rect = svg.getBoundingClientRect();
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+    const scaleX = W/rect.width, scaleY = H/rect.height;
+    return {
+      x:(clientX-rect.left)*scaleX,
+      y:(clientY-rect.top)*scaleY
+    };
+  }
+
+  function onMove(evt){
+    if(!dragging) return;
+    evt.preventDefault();
+    const p = svgPoint(evt);
+    let val;
+    if(series==='fab' || series==='vendu'){
+      val = ((padT+plotH-p.y)/plotH)*MAX_UNITS;
+      val = Math.max(0, Math.min(MAX_UNITS, Math.round(val)));
+      data[series][index] = val;
+    }
+    render();
+  }
+  function onUp(){
+    dragging = false;
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('touchend', onUp);
+  }
+  node.addEventListener('mousedown', (e)=>{
+    dragging = true;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+  node.addEventListener('touchstart', (e)=>{
+    dragging = true;
+    window.addEventListener('touchmove', onMove, {passive:false});
+    window.addEventListener('touchend', onUp);
+  }, {passive:true});
+}
+
+function renderControls(errors){
+  const wrap = document.getElementById('monthBlocks');
+  wrap.innerHTML = "";
+  const stock = computeStock();
+  months.forEach((m,i)=>{
+    const block = document.createElement('div');
+    block.className = 'month-block' + (errors[i] ? ' has-error' : '');
+
+    const nameWrap = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'month-name';
+    name.textContent = m;
+    nameWrap.appendChild(name);
+
+    const badge = document.createElement('div');
+    badge.className = 'stock-badge' + (stock[i] === 0 ? ' zero' : '');
+    badge.textContent = `Stock : ${stock[i]}`;
+    badge.title = "Stock cumulé = (fabriqué − vendu) reporté depuis Janvier";
+    nameWrap.appendChild(badge);
+
+    block.appendChild(nameWrap);
+
+    const sliders = document.createElement('div');
+    sliders.className = 'sliders';
+
+    sliders.appendChild(makeSlider('Fabriqués (u.)', 'fab', i, 0, MAX_UNITS, ''));
+    sliders.appendChild(makeSlider('Vendus (u.)', 'vendu', i, 0, MAX_UNITS, 'green'));
+    sliders.appendChild(makeSlider('Chiffre d\'affaires', 'ca', i, 0, MAX_CA, 'orange', 500));
+
+    if(errors[i]){
+      const err = document.createElement('div');
+      err.className = 'error-msg';
+      err.textContent = `⚠ Impossible : ${data.vendu[i]} vendus > ${data.fab[i]} fabriqués.`;
+      sliders.appendChild(err);
+    }
+
+    block.appendChild(sliders);
+    wrap.appendChild(block);
+  });
+}
+
+function makeSlider(label, series, index, min, max, colorClass, step){
+  const row = document.createElement('div');
+  row.className = 'slider-row' + (colorClass ? ' '+colorClass : '');
+
+  const lab = document.createElement('label');
+  lab.textContent = label;
+  row.appendChild(lab);
+
+  const range = document.createElement('input');
+  range.type = 'range';
+  range.min = min;
+  range.max = max;
+  range.step = step || 1;
+  range.value = data[series][index];
+
+  const num = document.createElement('input');
+  num.type = 'number';
+  num.min = min;
+  num.max = max;
+  num.step = step || 1;
+  num.value = data[series][index];
+
+  range.addEventListener('input', ()=>{
+    data[series][index] = Number(range.value);
+    num.value = range.value;
+    render();
+  });
+  num.addEventListener('change', ()=>{
+    let v = Number(num.value);
+    v = Math.max(min, Math.min(max, v));
+    data[series][index] = v;
+    render();
+  });
+
+  row.appendChild(range);
+  row.appendChild(num);
+  return row;
+}
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  data = JSON.parse(JSON.stringify(defaultData));
+  render();
+});
+
+const cumulBtn = document.getElementById('cumulBtn');
+cumulBtn.addEventListener('click', ()=>{
+  cumulMode = !cumulMode;
+  cumulBtn.classList.toggle('active', cumulMode);
+  cumulBtn.textContent = cumulMode
+    ? 'Vue cumulée (cliquer pour revenir au mensuel)'
+    : 'Voir en cumulé (Janv → mois)';
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
+aggable)
   fabPts.forEach((p,i)=>{
     const g = el('g',{class:'point'+(errors[i]?' invalid':''), 'data-series':'fab', 'data-index':i});
     g.appendChild(el('circle',{cx:p.x, cy:p.y, r:7, fill:'#1d4ed8', stroke:'#fff', 'stroke-width':2}));
