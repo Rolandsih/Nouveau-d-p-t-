@@ -223,7 +223,7 @@
     <div class="legend-item"><span class="legend-line" style="background:var(--orange)"></span>Chiffre d'affaires (FCFA)</div>
   </div>
 
-  <div class="global-error" id="globalError">⚠ Incohérence : on ne peut pas vendre plus de produits qu'on en a fabriqués.</div>
+  <div class="global-error" id="globalError">⚠ Incohérence : on ne peut pas vendre plus que ce qui est fabriqué + le stock disponible.</div>
 
   <div class="toolbar">
     <button class="toggle-btn" id="cumulBtn">Voir en cumulé (Janv → mois)</button>
@@ -314,8 +314,17 @@ function el(tag, attrs){
 }
 
 function getErrors(){
-  // error if vendu > fab for the same month
-  return data.fab.map((f,i) => data.vendu[i] > f);
+  // Erreur seulement si vendu > fabriqué + stock disponible AVANT ce mois.
+  // C'est-à-dire : on peut vendre plus que ce qu'on fabrique ce mois-ci,
+  // tant que le stock accumulé les mois précédents couvre la différence.
+  const errors = [];
+  let stockBefore = 0;
+  for(let i=0;i<months.length;i++){
+    const available = stockBefore + data.fab[i];
+    errors.push(data.vendu[i] > available);
+    stockBefore = available - data.vendu[i]; // peut être négatif si erreur, mais on continue le calcul
+  }
+  return errors;
 }
 
 function render(){
@@ -503,9 +512,11 @@ function renderControls(errors){
     sliders.appendChild(makeSlider('Chiffre d\'affaires', 'ca', i, 0, MAX_CA, 'orange', 500));
 
     if(errors[i]){
+      const stockBefore = (i === 0 ? 0 : stock[i-1]);
+      const available = stockBefore + data.fab[i];
       const err = document.createElement('div');
       err.className = 'error-msg';
-      err.textContent = `⚠ Impossible : ${data.vendu[i]} vendus > ${data.fab[i]} fabriqués.`;
+      err.textContent = `⚠ Impossible : ${data.vendu[i]} vendus, mais seulement ${available} disponibles (${data.fab[i]} fabriqués + ${stockBefore} en stock).`;
       sliders.appendChild(err);
     }
 
@@ -565,163 +576,6 @@ cumulBtn.addEventListener('click', ()=>{
   cumulBtn.textContent = cumulMode
     ? 'Vue cumulée (cliquer pour revenir au mensuel)'
     : 'Voir en cumulé (Janv → mois)';
-  render();
-});
-
-render();
-</script>
-</body>
-</html>
-aggable)
-  fabPts.forEach((p,i)=>{
-    const g = el('g',{class:'point'+(errors[i]?' invalid':''), 'data-series':'fab', 'data-index':i});
-    g.appendChild(el('circle',{cx:p.x, cy:p.y, r:7, fill:'#1d4ed8', stroke:'#fff', 'stroke-width':2}));
-    const lbl = el('text',{class:'value-label'+(errors[i]?' invalid-text':''), x:p.x, y:p.y-16, 'text-anchor':'middle', fill:'#1d4ed8'});
-    lbl.textContent = data.fab[i];
-    g.appendChild(lbl);
-    g.style.pointerEvents='all';
-    svg.appendChild(g);
-    attachDrag(g, 'fab', i);
-  });
-
-  // vendus points (draggable)
-  venduPts.forEach((p,i)=>{
-    const g = el('g',{class:'point'+(errors[i]?' invalid':''), 'data-series':'vendu', 'data-index':i});
-    g.appendChild(el('circle',{cx:p.x, cy:p.y, r:7, fill:'#2e9e3f', stroke:'#fff', 'stroke-width':2}));
-    const lbl = el('text',{class:'value-label'+(errors[i]?' invalid-text':''), x:p.x, y:p.y+24, 'text-anchor':'middle', fill:'#2e9e3f'});
-    lbl.textContent = data.vendu[i];
-    g.appendChild(lbl);
-    g.style.pointerEvents='all';
-    svg.appendChild(g);
-    attachDrag(g, 'vendu', i);
-  });
-
-  renderControls(errors);
-  renderGlobalError(errors);
-}
-
-function renderGlobalError(errors){
-  const ge = document.getElementById('globalError');
-  ge.classList.toggle('show', errors.some(Boolean));
-}
-
-function attachDrag(node, series, index){
-  let dragging = false;
-
-  function svgPoint(evt){
-    const rect = svg.getBoundingClientRect();
-    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-    const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-    const scaleX = W/rect.width, scaleY = H/rect.height;
-    return {
-      x:(clientX-rect.left)*scaleX,
-      y:(clientY-rect.top)*scaleY
-    };
-  }
-
-  function onMove(evt){
-    if(!dragging) return;
-    evt.preventDefault();
-    const p = svgPoint(evt);
-    let val;
-    if(series==='fab' || series==='vendu'){
-      val = ((padT+plotH-p.y)/plotH)*MAX_UNITS;
-      val = Math.max(0, Math.min(MAX_UNITS, Math.round(val)));
-      data[series][index] = val;
-    }
-    render();
-  }
-  function onUp(){
-    dragging = false;
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-    window.removeEventListener('touchmove', onMove);
-    window.removeEventListener('touchend', onUp);
-  }
-  node.addEventListener('mousedown', (e)=>{
-    dragging = true;
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  });
-  node.addEventListener('touchstart', (e)=>{
-    dragging = true;
-    window.addEventListener('touchmove', onMove, {passive:false});
-    window.addEventListener('touchend', onUp);
-  }, {passive:true});
-}
-
-function renderControls(errors){
-  const wrap = document.getElementById('monthBlocks');
-  wrap.innerHTML = "";
-  months.forEach((m,i)=>{
-    const block = document.createElement('div');
-    block.className = 'month-block' + (errors[i] ? ' has-error' : '');
-
-    const name = document.createElement('div');
-    name.className = 'month-name';
-    name.textContent = m;
-    block.appendChild(name);
-
-    const sliders = document.createElement('div');
-    sliders.className = 'sliders';
-
-    sliders.appendChild(makeSlider('Fabriqués (u.)', 'fab', i, 0, MAX_UNITS, ''));
-    sliders.appendChild(makeSlider('Vendus (u.)', 'vendu', i, 0, MAX_UNITS, 'green'));
-    sliders.appendChild(makeSlider('Chiffre d\'affaires', 'ca', i, 0, MAX_CA, 'orange', 500));
-
-    if(errors[i]){
-      const err = document.createElement('div');
-      err.className = 'error-msg';
-      err.textContent = `⚠ Impossible : ${data.vendu[i]} vendus > ${data.fab[i]} fabriqués.`;
-      sliders.appendChild(err);
-    }
-
-    block.appendChild(sliders);
-    wrap.appendChild(block);
-  });
-}
-
-function makeSlider(label, series, index, min, max, colorClass, step){
-  const row = document.createElement('div');
-  row.className = 'slider-row' + (colorClass ? ' '+colorClass : '');
-
-  const lab = document.createElement('label');
-  lab.textContent = label;
-  row.appendChild(lab);
-
-  const range = document.createElement('input');
-  range.type = 'range';
-  range.min = min;
-  range.max = max;
-  range.step = step || 1;
-  range.value = data[series][index];
-
-  const num = document.createElement('input');
-  num.type = 'number';
-  num.min = min;
-  num.max = max;
-  num.step = step || 1;
-  num.value = data[series][index];
-
-  range.addEventListener('input', ()=>{
-    data[series][index] = Number(range.value);
-    num.value = range.value;
-    render();
-  });
-  num.addEventListener('change', ()=>{
-    let v = Number(num.value);
-    v = Math.max(min, Math.min(max, v));
-    data[series][index] = v;
-    render();
-  });
-
-  row.appendChild(range);
-  row.appendChild(num);
-  return row;
-}
-
-document.getElementById('resetBtn').addEventListener('click', ()=>{
-  data = JSON.parse(JSON.stringify(defaultData));
   render();
 });
 
