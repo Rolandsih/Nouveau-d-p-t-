@@ -1,477 +1,472 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scanner QR & Codes-barres</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Générateur de courbe — Production, Ventes & CA</title>
+<style>
+  :root{
+    --blue:#1d4ed8;
+    --blue-dark:#0f2a6b;
+    --green:#2e9e3f;
+    --orange:#f08a1c;
+    --grid:#e7e9ee;
+    --ink:#0f2a6b;
+    --sub:#5b6478;
+    --red:#dc2626;
+    --red-bg:#fdecec;
+    --card:#ffffff;
+    --page:#eef1f6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', Arial, sans-serif;
+    background:var(--page);
+    padding:28px 16px 60px;
+    color:var(--ink);
+  }
+  .card{
+    max-width:1180px;
+    margin:0 auto;
+    background:var(--card);
+    border-radius:22px;
+    box-shadow:0 10px 30px rgba(20,30,60,.08);
+    padding:36px 40px 28px;
+  }
+  h1{
+    text-align:center;
+    font-size:30px;
+    letter-spacing:.5px;
+    color:var(--blue-dark);
+    margin:0 0 6px;
+    font-weight:800;
+  }
+  .subtitle{
+    text-align:center;
+    color:var(--sub);
+    font-size:14px;
+    letter-spacing:2px;
+    margin:0 0 22px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    text-transform:uppercase;
+  }
+  .subtitle::before, .subtitle::after{
+    content:"";
+    height:1px;
+    width:90px;
+    background:#c9cedb;
+  }
+  .legend{
+    display:flex;
+    justify-content:center;
+    gap:34px;
+    flex-wrap:wrap;
+    background:#fbfbfd;
+    border:1px solid #eceef3;
+    border-radius:16px;
+    padding:12px 20px;
+    margin:0 auto 26px;
+    max-width:780px;
+  }
+  .legend-item{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--blue-dark);}
+  .legend-dot{width:12px;height:12px;border-radius:50%;}
+  .legend-line{width:22px;height:3px;border-radius:2px;}
+  .axis-label{font-size:13px;font-weight:700;}
+  .chart-wrap{position:relative;}
+  svg{width:100%;height:auto;display:block;overflow:visible;}
+  .gridline{stroke:var(--grid);stroke-dasharray:4 4;stroke-width:1;}
+  .axis-text{font-size:13px;fill:var(--blue-dark);font-weight:600;}
+  .axis-text-right{font-size:13px;fill:var(--orange);font-weight:600;}
+  .month-text{font-size:14px;fill:var(--blue-dark);font-weight:700;}
+  .value-label{font-size:14px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:3px;}
+  .point{cursor:grab;}
+  .point:active{cursor:grabbing;}
+  .point.invalid circle{fill:var(--red)!important;stroke:var(--red)!important;}
+  .invalid-text{fill:var(--red)!important;}
+  .area-ca{fill:url(#caGradient);opacity:.9;}
 
-    body {
-      background: #0a0a0f;
-      color: #f0f0f0;
-      font-family: system-ui, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .header {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    .icon {
-      width: 52px;
-      height: 52px;
-      background: linear-gradient(135deg, #6c63ff, #3ecfcf);
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      margin: 0 auto 12px;
-    }
-
-    h1 { font-size: 20px; font-weight: 700; }
-    .subtitle { color: #555; font-size: 12px; margin-top: 4px; }
-
-    .card {
-      width: 100%;
-      max-width: 380px;
-      background: #13131a;
-      border-radius: 20px;
-      border: 1px solid #1e1e2e;
-      overflow: hidden;
-    }
-
-    /* Viewport */
-    #viewport {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 1/1;
-      background: #000;
-      overflow: hidden;
-    }
-
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    canvas { display: none; }
-
-    /* Idle */
-    #idle-screen {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      color: #333;
-      font-size: 13px;
-    }
-    #idle-screen span { font-size: 44px; opacity: 0.4; }
-
-    /* Scan overlay */
-    #scan-overlay {
-      position: absolute;
-      inset: 0;
-      display: none;
-      pointer-events: none;
-    }
-
-    .corner {
-      position: absolute;
-      width: 30px;
-      height: 30px;
-    }
-    .corner.tl { top: 20px; left: 20px; border-top: 3px solid #6c63ff; border-left: 3px solid #6c63ff; border-radius: 4px 0 0 0; }
-    .corner.tr { top: 20px; right: 20px; border-top: 3px solid #6c63ff; border-right: 3px solid #6c63ff; border-radius: 0 4px 0 0; }
-    .corner.bl { bottom: 20px; left: 20px; border-bottom: 3px solid #6c63ff; border-left: 3px solid #6c63ff; border-radius: 0 0 0 4px; }
-    .corner.br { bottom: 20px; right: 20px; border-bottom: 3px solid #6c63ff; border-right: 3px solid #6c63ff; border-radius: 0 0 4px 0; }
-
-    @keyframes scanline {
-      0%   { top: 18%; opacity: 1; }
-      48%  { opacity: 1; }
-      50%  { top: 78%; opacity: 1; }
-      98%  { opacity: 1; }
-      100% { top: 18%; opacity: 1; }
-    }
-
-    .scanline {
-      position: absolute;
-      left: 12%;
-      right: 12%;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, #6c63ff, #3ecfcf, #6c63ff, transparent);
-      box-shadow: 0 0 10px #6c63ff88;
-      animation: scanline 2.2s ease-in-out infinite;
-    }
-
-    /* Result overlay */
-    #result-overlay {
-      position: absolute;
-      inset: 0;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: rgba(10,10,15,0.93);
-      padding: 24px;
-      gap: 12px;
-    }
-
-    .result-check {
-      width: 54px;
-      height: 54px;
-      border-radius: 50%;
-      border: 2px solid #3ecfcf;
-      background: #3ecfcf15;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      color: #3ecfcf;
-    }
-
-    .result-type {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      color: #6c63ff;
-    }
-
-    .result-value {
-      background: #0a0a0f;
-      border: 1px solid #222;
-      border-radius: 10px;
-      padding: 10px 14px;
-      width: 100%;
-      word-break: break-all;
-      font-size: 13px;
-      color: #ccc;
-      text-align: center;
-      max-height: 80px;
-      overflow-y: auto;
-    }
-
-    .result-link {
-      color: #6c63ff;
-      font-size: 12px;
-      text-decoration: none;
-      border-bottom: 1px solid #6c63ff55;
-      padding-bottom: 2px;
-    }
-
-    /* Bottom section */
-    .bottom {
-      padding: 18px 18px 22px;
-    }
-
-    /* Mode selector */
-    .mode-tabs {
-      display: flex;
-      background: #0a0a0f;
-      border-radius: 10px;
-      padding: 3px;
-      margin-bottom: 14px;
-      border: 1px solid #1e1e2e;
-    }
-
-    .mode-tab {
-      flex: 1;
-      padding: 8px;
-      border: none;
-      border-radius: 8px;
-      background: transparent;
-      color: #555;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .mode-tab.active {
-      background: #1e1e2e;
-      color: #f0f0f0;
-    }
-
-    .status {
-      font-size: 12px;
-      color: #3ecfcf;
-      text-align: center;
-      min-height: 18px;
-      margin-bottom: 12px;
-    }
-
-    .btn-primary {
-      width: 100%;
-      padding: 14px;
-      background: linear-gradient(135deg, #6c63ff, #3ecfcf);
-      border: none;
-      border-radius: 12px;
-      color: #fff;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .btn-secondary {
-      width: 100%;
-      padding: 14px;
-      background: transparent;
-      border: 1px solid #222;
-      border-radius: 12px;
-      color: #888;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 8px;
-    }
-
-    .footer-note {
-      text-align: center;
-      font-size: 11px;
-      color: #333;
-      margin-top: 12px;
-    }
-
-    .unsupported-banner {
-      background: #ff6b6b15;
-      border: 1px solid #ff6b6b44;
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 12px;
-      color: #ff9999;
-      text-align: center;
-      margin-bottom: 12px;
-    }
-  </style>
+  .controls{
+    margin-top:30px;
+    border-top:1px solid #eef0f5;
+    padding-top:22px;
+  }
+  .controls h2{
+    font-size:16px;
+    color:var(--blue-dark);
+    margin:0 0 4px;
+  }
+  .controls p.hint{
+    margin:0 0 18px;
+    color:var(--sub);
+    font-size:13px;
+  }
+  .month-block{
+    display:grid;
+    grid-template-columns:90px 1fr;
+    gap:14px;
+    align-items:center;
+    padding:10px 12px;
+    border-radius:12px;
+    margin-bottom:6px;
+  }
+  .month-block.has-error{background:var(--red-bg);}
+  .month-name{font-weight:700;font-size:14px;color:var(--blue-dark);}
+  .sliders{display:flex;flex-direction:column;gap:6px;}
+  .slider-row{display:grid;grid-template-columns:140px 1fr 56px;align-items:center;gap:10px;}
+  .slider-row label{font-size:12.5px;font-weight:600;color:var(--sub);}
+  .slider-row input[type=range]{
+    width:100%;
+    accent-color:var(--blue);
+    cursor:pointer;
+  }
+  .slider-row.green input[type=range]{accent-color:var(--green);}
+  .slider-row.orange input[type=range]{accent-color:var(--orange);}
+  .slider-row input[type=number]{
+    width:56px;
+    border:1px solid #d8dbe4;
+    border-radius:8px;
+    padding:3px 4px;
+    font-size:12.5px;
+    text-align:center;
+    font-family:inherit;
+  }
+  .error-msg{
+    grid-column:1 / -1;
+    color:var(--red);
+    font-size:12.5px;
+    font-weight:700;
+    margin-top:2px;
+  }
+  .global-error{
+    display:none;
+    background:var(--red-bg);
+    color:var(--red);
+    border:1px solid #f6c2c2;
+    border-radius:12px;
+    padding:10px 16px;
+    font-size:13.5px;
+    font-weight:700;
+    margin-bottom:16px;
+    text-align:center;
+  }
+  .global-error.show{display:block;}
+  .reset-btn{
+    margin-top:18px;
+    background:var(--blue);
+    color:#fff;
+    border:none;
+    padding:10px 18px;
+    border-radius:10px;
+    font-size:13.5px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .reset-btn:hover{background:var(--blue-dark);}
+  .small-note{font-size:12px;color:var(--sub);margin-top:8px;}
+</style>
 </head>
 <body>
 
-  <div class="header">
-    <div class="icon">⬛</div>
-    <h1>Scanner</h1>
-    <p class="subtitle">QR Code & Code-barres</p>
+<div class="card">
+  <h1>PRODUCTION, VENTES &amp; CHIFFRE D'AFFAIRES</h1>
+  <div class="subtitle">Période : Janvier – Juin</div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-line" style="background:var(--blue)"></span>Produits fabriqués (unités)</div>
+    <div class="legend-item"><span class="legend-line" style="background:var(--green)"></span>Produits vendus (unités)</div>
+    <div class="legend-item"><span class="legend-line" style="background:var(--orange)"></span>Chiffre d'affaires (FCFA)</div>
   </div>
 
-  <div class="card">
-    <div id="viewport">
-      <video id="video" autoplay playsinline muted></video>
-      <canvas id="canvas"></canvas>
+  <div class="global-error" id="globalError">⚠ Incohérence : on ne peut pas vendre plus de produits qu'on en a fabriqués.</div>
 
-      <div id="idle-screen">
-        <span>📷</span>
-        <p>La caméra s'affiche ici</p>
-      </div>
-
-      <div id="scan-overlay">
-        <div class="corner tl"></div>
-        <div class="corner tr"></div>
-        <div class="corner bl"></div>
-        <div class="corner br"></div>
-        <div class="scanline"></div>
-      </div>
-
-      <div id="result-overlay">
-        <div class="result-check">✓</div>
-        <div class="result-type" id="result-type"></div>
-        <div class="result-value" id="result-value"></div>
-        <a class="result-link" id="result-link" href="#" target="_blank" rel="noopener" style="display:none">
-          Ouvrir le lien →
-        </a>
-      </div>
-    </div>
-
-    <div class="bottom">
-
-      <div id="unsupported-banner" class="unsupported-banner" style="display:none">
-        ⚠️ Navigateur non compatible — utilise Chrome ou Edge
-      </div>
-
-      <!-- Mode tabs -->
-      <div class="mode-tabs" id="mode-tabs">
-        <button class="mode-tab active" onclick="setMode('qr_code')" id="tab-qr">QR Code</button>
-        <button class="mode-tab" onclick="setMode('barcode')" id="tab-bar">Code-barres</button>
-        <button class="mode-tab" onclick="setMode('all')" id="tab-all">Les deux</button>
-      </div>
-
-      <div class="status" id="status"></div>
-
-      <button class="btn-primary" id="start-btn" onclick="startCamera()">📷 Ouvrir la caméra</button>
-      <button class="btn-secondary" id="stop-btn" onclick="stopCamera()" style="display:none">Arrêter</button>
-      <button class="btn-primary" id="again-btn" onclick="reset()" style="display:none">Scanner à nouveau</button>
-
-      <p class="footer-note">100% local · aucune donnée envoyée</p>
-    </div>
+  <div class="chart-wrap">
+    <svg id="chart" viewBox="0 0 1080 520"></svg>
   </div>
 
-  <script>
-    let stream = null;
-    let animFrame = null;
-    let detector = null;
-    let currentMode = 'qr_code';
+  <div class="controls">
+    <h2>Modifier les valeurs</h2>
+    <p class="hint">Glisse directement les points sur le graphique, ou ajuste les curseurs ci-dessous. Un mois passe en rouge si les ventes dépassent la production.</p>
+    <div id="monthBlocks"></div>
+    <button class="reset-btn" id="resetBtn">Réinitialiser les valeurs d'origine</button>
+  </div>
+</div>
 
-    const FORMATS = {
-      qr_code: ['qr_code'],
-      barcode: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'codabar', 'data_matrix'],
-      all: ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'codabar', 'data_matrix']
+<script>
+const months = ["Janvier","Février","Mars","Avril","Mai","Juin"];
+
+const defaultData = {
+  fab: [1, 10, 5, 6, 2, 0],
+  vendu: [2, 14, 0, 6, 0, 0],
+  ca: [2000, 28000, 0, 12000, 0, 0]
+};
+
+let data = JSON.parse(JSON.stringify(defaultData));
+
+const MAX_UNITS = 16;
+const MAX_CA = 50000;
+
+const svgNS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById('chart');
+const W = 1080, H = 520;
+const padL = 70, padR = 90, padT = 30, padB = 60;
+const plotW = W - padL - padR;
+const plotH = H - padT - padB;
+
+function xFor(i){ return padL + (plotW/(months.length-1))*i; }
+function yForUnits(v){ return padT + plotH - (v/MAX_UNITS)*plotH; }
+function yForCA(v){ return padT + plotH - (v/MAX_CA)*plotH; }
+
+// Catmull-Rom -> smooth bezier path
+function smoothPath(points){
+  if(points.length < 2) return "";
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for(let i=0;i<points.length-1;i++){
+    const p0 = points[i-1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i+1];
+    const p3 = points[i+2] || p2;
+    const cp1x = p1.x + (p2.x - p0.x)/6;
+    const cp1y = p1.y + (p2.y - p0.y)/6;
+    const cp2x = p2.x - (p3.x - p1.x)/6;
+    const cp2y = p2.y - (p3.y - p1.y)/6;
+    d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`;
+  }
+  return d;
+}
+
+function el(tag, attrs){
+  const e = document.createElementNS(svgNS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+function getErrors(){
+  // error if vendu > fab for the same month
+  return data.fab.map((f,i) => data.vendu[i] > f);
+}
+
+function render(){
+  svg.innerHTML = "";
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  const defs = el('defs',{});
+  const grad = el('linearGradient',{id:'caGradient', x1:'0', y1:'0', x2:'0', y2:'1'});
+  grad.appendChild(el('stop',{offset:'0%','stop-color':'#f08a1c','stop-opacity':'0.35'}));
+  grad.appendChild(el('stop',{offset:'100%','stop-color':'#f08a1c','stop-opacity':'0'}));
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  // gridlines + left axis (units) + right axis (CA)
+  const stepsUnits = 8; // 0,2,4,...16
+  for(let v=0; v<=MAX_UNITS; v+=2){
+    const y = yForUnits(v);
+    svg.appendChild(el('line',{class:'gridline', x1:padL, x2:W-padR, y1:y, y2:y}));
+    const t = el('text',{class:'axis-text', x:padL-14, y:y+5, 'text-anchor':'end'});
+    t.textContent = v;
+    svg.appendChild(t);
+    const caVal = Math.round((v/MAX_UNITS)*MAX_CA/1000)*1000;
+    const tr = el('text',{class:'axis-text-right', x:W-padR+14, y:y+5, 'text-anchor':'start'});
+    tr.textContent = caVal.toLocaleString('fr-FR');
+    svg.appendChild(tr);
+  }
+
+  // axis titles
+  const lt = el('text',{class:'axis-text', x:padL-14, y:padT-12, 'text-anchor':'start'});
+  lt.textContent = 'Unités'; lt.style.fontWeight='700';
+  svg.appendChild(lt);
+  const rt = el('text',{class:'axis-text-right', x:W-padR+14, y:padT-12, 'text-anchor':'start'});
+  rt.textContent = 'CA (FCFA)'; rt.style.fontWeight='700';
+  svg.appendChild(rt);
+
+  // month labels
+  months.forEach((m,i)=>{
+    const t = el('text',{class:'month-text', x:xFor(i), y:H-padB+30, 'text-anchor':'middle'});
+    t.textContent = m;
+    svg.appendChild(t);
+  });
+
+  const errors = getErrors();
+
+  // points arrays
+  const fabPts = data.fab.map((v,i)=>({x:xFor(i), y:yForUnits(v)}));
+  const venduPts = data.vendu.map((v,i)=>({x:xFor(i), y:yForUnits(v)}));
+  const caPts = data.ca.map((v,i)=>({x:xFor(i), y:yForCA(v)}));
+
+  // CA area fill
+  const areaPath = smoothPath(caPts) + ` L ${caPts[caPts.length-1].x} ${yForCA(0)} L ${caPts[0].x} ${yForCA(0)} Z`;
+  svg.appendChild(el('path',{d:areaPath, class:'area-ca'}));
+
+  // lines
+  svg.appendChild(el('path',{d:smoothPath(caPts), fill:'none', stroke:'#f08a1c', 'stroke-width':3}));
+  svg.appendChild(el('path',{d:smoothPath(fabPts), fill:'none', stroke:'#1d4ed8', 'stroke-width':3}));
+  svg.appendChild(el('path',{d:smoothPath(venduPts), fill:'none', stroke:'#2e9e3f', 'stroke-width':3}));
+
+  // CA points + labels (no drag, informational but still editable via slider)
+  caPts.forEach((p,i)=>{
+    svg.appendChild(el('circle',{cx:p.x, cy:p.y, r:6, fill:'#f08a1c', stroke:'#fff', 'stroke-width':2}));
+    const lbl = el('text',{class:'value-label', x:p.x, y:p.y-14, 'text-anchor':'middle', fill:'#f08a1c'});
+    lbl.textContent = data.ca[i].toLocaleString('fr-FR');
+    svg.appendChild(lbl);
+  });
+
+  // fabriqués points (draggable)
+  fabPts.forEach((p,i)=>{
+    const g = el('g',{class:'point'+(errors[i]?' invalid':''), 'data-series':'fab', 'data-index':i});
+    g.appendChild(el('circle',{cx:p.x, cy:p.y, r:7, fill:'#1d4ed8', stroke:'#fff', 'stroke-width':2}));
+    const lbl = el('text',{class:'value-label'+(errors[i]?' invalid-text':''), x:p.x, y:p.y-16, 'text-anchor':'middle', fill:'#1d4ed8'});
+    lbl.textContent = data.fab[i];
+    g.appendChild(lbl);
+    g.style.pointerEvents='all';
+    svg.appendChild(g);
+    attachDrag(g, 'fab', i);
+  });
+
+  // vendus points (draggable)
+  venduPts.forEach((p,i)=>{
+    const g = el('g',{class:'point'+(errors[i]?' invalid':''), 'data-series':'vendu', 'data-index':i});
+    g.appendChild(el('circle',{cx:p.x, cy:p.y, r:7, fill:'#2e9e3f', stroke:'#fff', 'stroke-width':2}));
+    const lbl = el('text',{class:'value-label'+(errors[i]?' invalid-text':''), x:p.x, y:p.y+24, 'text-anchor':'middle', fill:'#2e9e3f'});
+    lbl.textContent = data.vendu[i];
+    g.appendChild(lbl);
+    g.style.pointerEvents='all';
+    svg.appendChild(g);
+    attachDrag(g, 'vendu', i);
+  });
+
+  renderControls(errors);
+  renderGlobalError(errors);
+}
+
+function renderGlobalError(errors){
+  const ge = document.getElementById('globalError');
+  ge.classList.toggle('show', errors.some(Boolean));
+}
+
+function attachDrag(node, series, index){
+  let dragging = false;
+
+  function svgPoint(evt){
+    const rect = svg.getBoundingClientRect();
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+    const scaleX = W/rect.width, scaleY = H/rect.height;
+    return {
+      x:(clientX-rect.left)*scaleX,
+      y:(clientY-rect.top)*scaleY
     };
+  }
 
-    const TYPE_LABELS = {
-      qr_code: 'QR Code',
-      ean_13: 'EAN-13',
-      ean_8: 'EAN-8',
-      code_128: 'Code 128',
-      code_39: 'Code 39',
-      upc_a: 'UPC-A',
-      upc_e: 'UPC-E',
-      itf: 'ITF',
-      codabar: 'Codabar',
-      data_matrix: 'Data Matrix',
-    };
+  function onMove(evt){
+    if(!dragging) return;
+    evt.preventDefault();
+    const p = svgPoint(evt);
+    let val;
+    if(series==='fab' || series==='vendu'){
+      val = ((padT+plotH-p.y)/plotH)*MAX_UNITS;
+      val = Math.max(0, Math.min(MAX_UNITS, Math.round(val)));
+      data[series][index] = val;
+    }
+    render();
+  }
+  function onUp(){
+    dragging = false;
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('touchend', onUp);
+  }
+  node.addEventListener('mousedown', (e)=>{
+    dragging = true;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+  node.addEventListener('touchstart', (e)=>{
+    dragging = true;
+    window.addEventListener('touchmove', onMove, {passive:false});
+    window.addEventListener('touchend', onUp);
+  }, {passive:true});
+}
 
-    // Check support
-    if (!('BarcodeDetector' in window)) {
-      document.getElementById('unsupported-banner').style.display = 'block';
-      document.getElementById('start-btn').disabled = true;
-      document.getElementById('start-btn').style.opacity = '0.4';
+function renderControls(errors){
+  const wrap = document.getElementById('monthBlocks');
+  wrap.innerHTML = "";
+  months.forEach((m,i)=>{
+    const block = document.createElement('div');
+    block.className = 'month-block' + (errors[i] ? ' has-error' : '');
+
+    const name = document.createElement('div');
+    name.className = 'month-name';
+    name.textContent = m;
+    block.appendChild(name);
+
+    const sliders = document.createElement('div');
+    sliders.className = 'sliders';
+
+    sliders.appendChild(makeSlider('Fabriqués (u.)', 'fab', i, 0, MAX_UNITS, ''));
+    sliders.appendChild(makeSlider('Vendus (u.)', 'vendu', i, 0, MAX_UNITS, 'green'));
+    sliders.appendChild(makeSlider('Chiffre d\'affaires', 'ca', i, 0, MAX_CA, 'orange', 500));
+
+    if(errors[i]){
+      const err = document.createElement('div');
+      err.className = 'error-msg';
+      err.textContent = `⚠ Impossible : ${data.vendu[i]} vendus > ${data.fab[i]} fabriqués.`;
+      sliders.appendChild(err);
     }
 
-    function setMode(mode) {
-      currentMode = mode;
-      document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
-      document.getElementById('tab-' + (mode === 'qr_code' ? 'qr' : mode === 'barcode' ? 'bar' : 'all')).classList.add('active');
-      // Recreate detector with new formats
-      if ('BarcodeDetector' in window) {
-        detector = new BarcodeDetector({ formats: FORMATS[mode] });
-      }
-    }
+    block.appendChild(sliders);
+    wrap.appendChild(block);
+  });
+}
 
-    async function startCamera() {
-      setStatus("Demande de permission...");
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-        const video = document.getElementById('video');
-        video.srcObject = stream;
-        await video.play();
+function makeSlider(label, series, index, min, max, colorClass, step){
+  const row = document.createElement('div');
+  row.className = 'slider-row' + (colorClass ? ' '+colorClass : '');
 
-        document.getElementById('idle-screen').style.display = 'none';
-        document.getElementById('scan-overlay').style.display = 'block';
-        document.getElementById('start-btn').style.display = 'none';
-        document.getElementById('stop-btn').style.display = 'block';
-        document.getElementById('mode-tabs').style.opacity = '0.4';
-        document.getElementById('mode-tabs').style.pointerEvents = 'none';
+  const lab = document.createElement('label');
+  lab.textContent = label;
+  row.appendChild(lab);
 
-        if (!detector) {
-          detector = new BarcodeDetector({ formats: FORMATS[currentMode] });
-        }
+  const range = document.createElement('input');
+  range.type = 'range';
+  range.min = min;
+  range.max = max;
+  range.step = step || 1;
+  range.value = data[series][index];
 
-        setStatus("Scan en cours...");
-        scanLoop();
+  const num = document.createElement('input');
+  num.type = 'number';
+  num.min = min;
+  num.max = max;
+  num.step = step || 1;
+  num.value = data[series][index];
 
-      } catch (err) {
-        setStatus("❌ " + err.message, true);
-      }
-    }
+  range.addEventListener('input', ()=>{
+    data[series][index] = Number(range.value);
+    num.value = range.value;
+    render();
+  });
+  num.addEventListener('change', ()=>{
+    let v = Number(num.value);
+    v = Math.max(min, Math.min(max, v));
+    data[series][index] = v;
+    render();
+  });
 
-    function scanLoop() {
-      const video = document.getElementById('video');
-      const canvas = document.getElementById('canvas');
+  row.appendChild(range);
+  row.appendChild(num);
+  return row;
+}
 
-      const tick = async () => {
-        if (!stream || video.readyState < 2) {
-          animFrame = requestAnimationFrame(tick);
-          return;
-        }
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  data = JSON.parse(JSON.stringify(defaultData));
+  render();
+});
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-
-        try {
-          const codes = await detector.detect(canvas);
-          if (codes.length > 0) {
-            const code = codes[0];
-            showResult(code.rawValue, code.format);
-            return;
-          }
-        } catch (_) {}
-
-        animFrame = requestAnimationFrame(tick);
-      };
-
-      animFrame = requestAnimationFrame(tick);
-    }
-
-    function showResult(value, format) {
-      stopStream();
-
-      document.getElementById('scan-overlay').style.display = 'none';
-      document.getElementById('result-overlay').style.display = 'flex';
-      document.getElementById('result-type').textContent = TYPE_LABELS[format] || format;
-      document.getElementById('result-value').textContent = value;
-
-      const link = document.getElementById('result-link');
-      try {
-        new URL(value);
-        link.href = value;
-        link.style.display = 'inline';
-      } catch {
-        link.style.display = 'none';
-      }
-
-      document.getElementById('stop-btn').style.display = 'none';
-      document.getElementById('again-btn').style.display = 'block';
-      setStatus("✅ Détecté !");
-    }
-
-    function stopStream() {
-      if (animFrame) cancelAnimationFrame(animFrame);
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-        stream = null;
-      }
-    }
-
-    function stopCamera() {
-      stopStream();
-      document.getElementById('video').srcObject = null;
-      document.getElementById('idle-screen').style.display = 'flex';
-      document.getElementById('scan-overlay').style.display = 'none';
-      document.getElementById('start-btn').style.display = 'block';
-      document.getElementById('stop-btn').style.display = 'none';
-      document.getElementById('mode-tabs').style.opacity = '1';
-      document.getElementById('mode-tabs').style.pointerEvents = 'auto';
-      setStatus("");
-    }
-
-    function reset() {
-      document.getElementById('result-overlay').style.display = 'none';
-      document.getElementById('again-btn').style.display = 'none';
-      document.getElementById('mode-tabs').style.opacity = '1';
-      document.getElementById('mode-tabs').style.pointerEvents = 'auto';
-      setStatus("");
-      startCamera();
-    }
-
-    function setStatus(msg, isError = false) {
-      const el = document.getElementById('status');
-      el.textContent = msg;
-      el.style.color = isError ? '#ff6b6b' : '#3ecfcf';
-    }
-  </script>
-
+render();
+</script>
 </body>
 </html>
